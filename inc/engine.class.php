@@ -150,6 +150,11 @@ class PluginDatainjectionEngine
             'formats'          => $formats,
             'mandatory_fields' => $mandatory_fields,
             'optional_data'    => $optional_data,
+            'import_context'   => [
+                'model_id'   => $this->getModel()->fields['id'],
+                'model_name' => $this->getModel()->fields['name'],
+                'line'       => $index,
+            ],
         ];
 
         //Will manage add or update

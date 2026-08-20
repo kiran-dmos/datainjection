@@ -67,6 +67,9 @@ class PluginDatainjectionCommonInjectionLib
     //Entity in which data will be inserted
     private $entity = 0;
 
+    //Context of the current CSV import, used for history messages
+    private $import_context = [];
+
     public const ACTION_CHECK  = 0;
 
     //Type of action to perform
@@ -212,6 +215,10 @@ class PluginDatainjectionCommonInjectionLib
 
         //If entity is given stores it, then use root entity
         $this->entity = $injection_options['entities_id'] ?? 0;
+
+        if (isset($injection_options['import_context'])) {
+            $this->import_context = $injection_options['import_context'];
+        }
     }
 
 
@@ -1794,6 +1801,7 @@ class PluginDatainjectionCommonInjectionLib
             }
         }
 
+        $history_snapshot = PluginDatainjectionHistoryLogger::beforeWrite($item, $toinject);
         $newID = null;
         if (method_exists($injectionClass, 'customimport')) {
             $newID = call_user_func(
@@ -1802,11 +1810,28 @@ class PluginDatainjectionCommonInjectionLib
                 $add,
                 $this->rights,
             );
+            PluginDatainjectionHistoryLogger::afterWrite(
+                $history_snapshot,
+                $injectionClass,
+                $item,
+                $toinject,
+                $newID,
+                $add,
+                $this->import_context,
+            );
         } elseif ($item instanceof CommonDropdown && $add && !($item instanceof SoftwareLicense)) {
             $newID = $item->import($toinject);
         } elseif ($add) {
             if ($newID = $item->add($toinject)) {
-                self::logAddOrUpdate($item, $add);
+                PluginDatainjectionHistoryLogger::afterWrite(
+                    $history_snapshot,
+                    $injectionClass,
+                    $item,
+                    $toinject,
+                    $newID,
+                    $add,
+                    $this->import_context,
+                );
             }
         } else {
             // allow to update locked fields from datainjection
@@ -1816,7 +1841,15 @@ class PluginDatainjectionCommonInjectionLib
             }
             if ($item->update($toinject)) {
                 $newID = $toinject['id'];
-                self::logAddOrUpdate($item, $add);
+                PluginDatainjectionHistoryLogger::afterWrite(
+                    $history_snapshot,
+                    $injectionClass,
+                    $item,
+                    $toinject,
+                    $newID,
+                    $add,
+                    $this->import_context,
+                );
             }
         }
         $this->setValueForItemtype(get_class($item), 'id', $newID);
