@@ -89,8 +89,8 @@ class PluginDatainjectionClientInjection
             'model_type_name' => PluginDatainjectionModel::getTypeName(),
             'models_id' => PluginDatainjectionSession::getParam('models_id'),
             'step' => PluginDatainjectionSession::getParam('step'),
-            'upload_url' => $CFG_GLPI['root_doc'] . "/plugins/datainjection/ajax/dropdownSelectModel.php",
-            'result_url' => $CFG_GLPI['root_doc'] . "/plugins/datainjection/ajax/results.php",
+            'upload_url' => plugin_datainjection_geturl() . "ajax/dropdownSelectModel.php",
+            'result_url' => plugin_datainjection_geturl() . "ajax/results.php",
             'params' => ['models_id' => PluginDatainjectionSession::getParam('models_id')],
             'upload_step' => self::STEP_UPLOAD,
             'result_step' => self::STEP_RESULT,
@@ -160,8 +160,8 @@ class PluginDatainjectionClientInjection
         PluginDatainjectionSession::setParam('injection_results', json_encode([]));
         PluginDatainjectionSession::setParam('injection_error_lines', json_encode([]));
 
-        $batch_url  = $CFG_GLPI['root_doc'] . "/plugins/datainjection/ajax/inject_batch.php";
-        $result_url = $CFG_GLPI['root_doc'] . "/plugins/datainjection/ajax/results.php";
+        $batch_url  = plugin_datainjection_geturl() . "ajax/inject_batch.php";
+        $result_url = plugin_datainjection_geturl() . "ajax/results.php";
 
         TemplateRenderer::getInstance()->display('@datainjection/clientinjection_injection.html.twig', [
             'model_name' => $model->fields['name'],

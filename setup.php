@@ -28,9 +28,6 @@
  * -------------------------------------------------------------------------
  */
 
-use function Safe\define;
-use function Safe\mkdir;
-
 define('PLUGIN_DATAINJECTION_VERSION', '2.15.10');
 
 // Minimal GLPI version, inclusive
@@ -76,7 +73,7 @@ function plugin_init_datainjection()
           = ['Profile' => ['PluginDatainjectionProfile', 'purgeProfiles']];
 
         // Css file
-        if (str_contains($_SERVER['REQUEST_URI'] ?? '', Plugin::getPhpDir('datainjection', false))) {
+        if (str_contains($_SERVER['REQUEST_URI'] ?? '', Plugin::getWebDir('datainjection', false))) {
             $PLUGIN_HOOKS['add_css']['datainjection'] = 'css/datainjection.css';
         }
 
@@ -239,7 +236,5 @@ function plugin_datainjection_checkDirectories()
 
 function plugin_datainjection_geturl(): string
 {
-    /** @var array $CFG_GLPI */
-    global $CFG_GLPI;
-    return sprintf('%s/plugins/datainjection/', $CFG_GLPI['root_doc']);
+    return Plugin::getWebDir('datainjection') . '/';
 }
