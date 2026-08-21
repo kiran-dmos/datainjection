@@ -96,7 +96,10 @@ class PluginDatainjectionHistoryLogger
         }
 
         foreach ($toinject as $field => $inputValue) {
-            if (self::shouldSkipField($field, $inputValue)) {
+            if (
+                self::shouldSkipField($field, $inputValue)
+                || (self::isInfocomObject($item) && self::shouldSkipInfocomField($field))
+            ) {
                 continue;
             }
 
@@ -553,7 +556,7 @@ class PluginDatainjectionHistoryLogger
 
     private static function getHistoryTarget($item, array $toinject, $newID): ?array
     {
-        if (self::isFieldsPluginObject($item)) {
+        if (self::isFieldsPluginObject($item) || self::isInfocomObject($item)) {
             $itemtype = $toinject['itemtype'] ?? ($item->fields['itemtype'] ?? null);
             $items_id = $toinject['items_id'] ?? ($item->fields['items_id'] ?? null);
             if ($itemtype && $items_id) {
@@ -572,7 +575,7 @@ class PluginDatainjectionHistoryLogger
 
     private static function targetKeepsHistory($item, array $target): bool
     {
-        if (!self::isFieldsPluginObject($item)) {
+        if (!self::isFieldsPluginObject($item) && !self::isInfocomObject($item)) {
             return (bool) $item->dohistory;
         }
 
@@ -718,10 +721,25 @@ class PluginDatainjectionHistoryLogger
         return false;
     }
 
+    private static function shouldSkipInfocomField(string $field): bool
+    {
+        return in_array($field, [
+            'items_id',
+            'itemtype',
+            'entities_id',
+            'is_recursive',
+        ], true);
+    }
+
     private static function isFieldsPluginObject($item): bool
     {
         return class_exists('PluginFieldsAbstractContainerInstance')
             && is_a($item, 'PluginFieldsAbstractContainerInstance');
+    }
+
+    private static function isInfocomObject($item): bool
+    {
+        return is_a($item, Infocom::class);
     }
 
     private static function displayFieldsPluginValue(string $field, $value, array $option)
