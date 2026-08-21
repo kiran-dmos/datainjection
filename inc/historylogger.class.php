@@ -90,7 +90,7 @@ class PluginDatainjectionHistoryLogger
             return;
         }
 
-        $options = $injectionClass->getOptions($target['itemtype']);
+        $options = self::getNativeOptions($injectionClass, $item, $target);
         if (!$add) {
             self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, false);
         }
@@ -383,6 +383,61 @@ class PluginDatainjectionHistoryLogger
         return self::buildFieldsPluginOptionsFromMetadata($targetItemtype, $containerID);
     }
 
+    private static function getNativeOptions(
+        PluginDatainjectionInjectionInterface $injectionClass,
+        $item,
+        array $target
+    ): array {
+        if (self::isInfocomObject($item)) {
+            $options = self::getInfocomParentOptions($target['itemtype']);
+            if (!empty($options)) {
+                return $options;
+            }
+        }
+
+        return $injectionClass->getOptions($target['itemtype']);
+    }
+
+    private static function getInfocomParentOptions(string $targetItemtype): array
+    {
+        if (!class_exists('Infocom') || !method_exists('Infocom', 'rawSearchOptionsToAdd')) {
+            return [];
+        }
+
+        $options = self::indexSearchOptionsByID(Infocom::rawSearchOptionsToAdd($targetItemtype));
+        foreach ($options as &$option) {
+            if (!is_array($option) || isset($option['linkfield'])) {
+                continue;
+            }
+
+            if (($option['table'] ?? null) === Infocom::getTable()) {
+                $option['linkfield'] = $option['field'] ?? null;
+                continue;
+            }
+
+            if (!empty($option['table']) && function_exists('getForeignKeyFieldForTable')) {
+                $option['linkfield'] = getForeignKeyFieldForTable($option['table']);
+            }
+        }
+        unset($option);
+
+        return $options;
+    }
+
+    private static function indexSearchOptionsByID(array $options): array
+    {
+        $indexed = [];
+        foreach ($options as $id => $option) {
+            if (is_array($option) && array_key_exists('id', $option)) {
+                $id = $option['id'];
+            }
+
+            $indexed[$id] = $option;
+        }
+
+        return $indexed;
+    }
+
     private static function getFieldsPluginContainerIDByFieldID(int $fieldID): ?int
     {
         /** @var DBmysql $DB */
@@ -594,8 +649,19 @@ class PluginDatainjectionHistoryLogger
                 continue;
             }
 
-            if (($option['linkfield'] ?? null) === $field || ($option['field'] ?? null) === $field) {
-                $option['id'] = $id;
+            if (($option['linkfield'] ?? null) === $field) {
+                $option['id'] = $option['id'] ?? $id;
+                return $option;
+            }
+        }
+
+        foreach ($options as $id => $option) {
+            if (!is_array($option)) {
+                continue;
+            }
+
+            if (($option['field'] ?? null) === $field) {
+                $option['id'] = $option['id'] ?? $id;
                 return $option;
             }
         }

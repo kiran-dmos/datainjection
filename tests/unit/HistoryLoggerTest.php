@@ -32,9 +32,12 @@ namespace GlpiPlugin\Datainjection\Tests\Unit;
 
 use Computer;
 use Glpi\Tests\DbTestCase;
+use Infocom;
 use Log;
 use PluginDatainjectionCommonInjectionLib;
 use PluginDatainjectionComputerInjection;
+use PluginDatainjectionHistoryLogger;
+use PluginDatainjectionInfocomInjection;
 
 final class HistoryLoggerTest extends DbTestCase
 {
@@ -109,6 +112,53 @@ final class HistoryLoggerTest extends DbTestCase
         self::assertSame(1, $DB->numrows($result));
     }
 
+    public function testInfocomCreateUsesParentItemSearchOptionForHistory(): void
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $computer = $this->createItem(Computer::class, [
+            'name'        => 'Test_Computer_Infocom_HistoryLogger',
+            'entities_id' => 0,
+        ]);
+
+        $toinject = [
+            'itemtype'      => Computer::class,
+            'items_id'      => $computer->getID(),
+            'entities_id'   => 0,
+            'warranty_date' => '2027-08-21',
+        ];
+        $infocom = new Infocom();
+        $snapshot = PluginDatainjectionHistoryLogger::beforeWrite($infocom, $toinject);
+        $infocom_id = $infocom->add($toinject);
+        self::assertGreaterThan(0, (int) $infocom_id);
+
+        $infocom->getFromDB((int) $infocom_id);
+        $baseline = $snapshot['baseline'];
+        PluginDatainjectionHistoryLogger::afterWrite(
+            $snapshot,
+            new PluginDatainjectionInfocomInjection(),
+            $infocom,
+            $toinject,
+            $infocom_id,
+            true,
+        );
+
+        $warranty_date_search_option = $this->getInfocomParentSearchOptionID(Computer::class, 'warranty_date');
+
+        $query = "SELECT `id`
+                FROM `" . Log::getTable() . "`
+                WHERE `id` > " . (int) $baseline . "
+                  AND `items_id` = " . (int) $computer->getID() . "
+                  AND `itemtype` = '" . $DB->escape(Computer::class) . "'
+                  AND `id_search_option` = '" . $DB->escape((string) $warranty_date_search_option) . "'
+                  AND `old_value` = 'N/A'
+                  AND `new_value` = '2027-08-21'";
+        $result = $DB->doQuery($query);
+
+        self::assertSame(1, $DB->numrows($result));
+    }
+
     private function getSearchOptionID(PluginDatainjectionComputerInjection $injection_class, string $field): int
     {
         foreach ($injection_class->getOptions(Computer::class) as $id => $option) {
@@ -118,6 +168,17 @@ final class HistoryLoggerTest extends DbTestCase
         }
 
         self::fail(sprintf('Unable to find search option for field "%s"', $field));
+    }
+
+    private function getInfocomParentSearchOptionID(string $itemtype, string $field): int
+    {
+        foreach (Infocom::rawSearchOptionsToAdd($itemtype) as $option) {
+            if (($option['field'] ?? null) === $field) {
+                return (int) $option['id'];
+            }
+        }
+
+        self::fail(sprintf('Unable to find parent infocom search option for field "%s"', $field));
     }
 
     private function getLastLogID(): int
