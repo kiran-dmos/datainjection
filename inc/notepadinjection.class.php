@@ -47,7 +47,7 @@ class PluginDatainjectionNotepadInjection extends Notepad implements PluginDatai
 
     public function connectedTo()
     {
-        return ['Computer', 'NetworkEquipment', 'Printer'];
+        return ['Computer', 'Monitor', 'NetworkEquipment', 'Peripheral', 'Printer'];
     }
 
     public function isNullable($field)
