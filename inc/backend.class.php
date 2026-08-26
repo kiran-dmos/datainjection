@@ -91,6 +91,12 @@ abstract class PluginDatainjectionBackend
 
     }
 
+    public function getFilePath(): string
+    {
+
+        return $this->file;
+    }
+
 
     public static function is_utf8($string) // phpcs:ignore
     {

@@ -1667,6 +1667,10 @@ class PluginDatainjectionCommonInjectionLib
                     $this->processAfterInsertOrUpdate($this->injectionClass, $add);
                     //$this->results['status'] = self::SUCCESS;
                     $this->results[get_class($item)] = $newID;
+                    $this->results['_datainjection_target'] = [
+                        'itemtype' => get_class($item),
+                        'items_id' => (int) $newID,
+                    ];
 
                     //Process other types
 

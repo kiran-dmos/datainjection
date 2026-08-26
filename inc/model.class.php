@@ -984,6 +984,7 @@ class PluginDatainjectionModel extends CommonDBTM
             $original_filename           = $_FILES['filename']['name'];
             $temporary_uploaded_filename = $_FILES["filename"]["tmp_name"];
             $unique_filename             = tempnam(realpath(PLUGIN_DATAINJECTION_UPLOAD_DIR), "PWS");
+            $_SESSION['datainjection']['file_name'] = $original_filename;
 
             if (!move_uploaded_file($temporary_uploaded_filename, $unique_filename)) {
                 return ['status'  => PluginDatainjectionCommonInjectionLib::FAILED,

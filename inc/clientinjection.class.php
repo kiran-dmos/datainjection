@@ -248,8 +248,16 @@ class PluginDatainjectionClientInjection
             $_SESSION['datainjection']['step'] = self::STEP_RESULT;
             unset($_SESSION['datainjection']['go']);
 
-            //Delete CSV file
             $backend = $model->getBackend();
+            PluginDatainjectionImportDocumentAttacher::attach(
+                $model,
+                $backend,
+                $results,
+                (string) PluginDatainjectionSession::getParam('file_name'),
+                (int) $entities_id,
+            );
+
+            //Delete CSV file
             $backend->deleteFile();
         }
 
