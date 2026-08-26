@@ -150,6 +150,7 @@ class PluginDatainjectionInjectionType
         }
         $type                       = new $p['primary_type']();
         $values[$p['primary_type']] = $type->getTypeName();
+        $auto_itemtype              = self::NO_VALUE;
 
         foreach ($INJECTABLE_TYPES as $type => $plugin) {
             if (is_a($type, CommonDBTM::class, true)) {
@@ -159,9 +160,18 @@ class PluginDatainjectionInjectionType
                     if (in_array($p['primary_type'], $connected_to)) {
                         $typename          = getItemTypeForTable($injectionClass->getTable());
                         $values[$typename] = call_user_func([$type, 'getTypeName']);
+                        if (
+                            $auto_itemtype === self::NO_VALUE
+                            && self::shouldAutoSelectNotepad($typename, $mapping_or_info->fields)
+                        ) {
+                            $auto_itemtype = $typename;
+                        }
                     }
                 }
             }
+        }
+        if ($p['itemtype'] === self::NO_VALUE && $auto_itemtype !== self::NO_VALUE) {
+            $p['itemtype'] = $auto_itemtype;
         }
         asort($values);
 
@@ -284,6 +294,10 @@ class PluginDatainjectionInjectionType
     {
 
         $name = strtolower($mapping['name']);
+        if (self::isNotepadContentOption($option) && self::isNotesMappingName($name)) {
+            return true;
+        }
+
         if (self::testBasicEqual(strtolower($mapping['name']), $option)) {
             return true;
         }
@@ -310,6 +324,30 @@ class PluginDatainjectionInjectionType
         return (strtolower($option['field']) == $name)
         || (strtolower($option['name']) == $name)
         || (strtolower($option['linkfield']) == $name);
+    }
+
+    private static function shouldAutoSelectNotepad(string $itemtype, array $mapping): bool
+    {
+        return $itemtype === 'Notepad' && self::isNotesMappingName($mapping['name'] ?? '');
+    }
+
+    private static function isNotepadContentOption(array $option): bool
+    {
+        $notepad_table = class_exists('Notepad') ? Notepad::getTable() : 'glpi_notepads';
+        if (($option['table'] ?? null) !== $notepad_table) {
+            return false;
+        }
+
+        return in_array($option['field'] ?? '', ['content', 'notepad'], true)
+            || in_array($option['linkfield'] ?? '', ['content', 'notepad'], true);
+    }
+
+    private static function isNotesMappingName(string $name): bool
+    {
+        $name = strtolower(trim($name));
+        $name = preg_replace('/[^a-z0-9]+/', '', $name) ?: '';
+
+        return in_array($name, ['note', 'notes', 'notepad', 'notepads'], true);
     }
 
     /**
