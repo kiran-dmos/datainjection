@@ -70,6 +70,9 @@ class PluginDatainjectionCommonInjectionLib
     //Context of the current CSV import, used for history messages
     private $import_context = [];
 
+    //Fields provided by the import mapping or upload form, before DB enrichment
+    private array $mapped_fields = [];
+
     public const ACTION_CHECK  = 0;
 
     //Type of action to perform
@@ -120,6 +123,15 @@ class PluginDatainjectionCommonInjectionLib
     //Field status must evolve when ticket #2216 will be resolved
     public const FIELD_INJECTABLE     = 1;
     public const FIELD_VIRTUAL        = 2;
+
+    private const UPDATE_METADATA_FIELDS = [
+        'id',
+        'items_id',
+        'itemtype',
+        'plugin_fields_containers_id',
+        'entities_id',
+        'is_recursive',
+    ];
 
 
 
@@ -208,6 +220,7 @@ class PluginDatainjectionCommonInjectionLib
 
         //Store values to inject
         $this->values = $values;
+        $this->mapped_fields = self::extractMappedFields($values);
 
         //Store injectClass & primary_type
         $this->injectionClass = $injectionClass;
@@ -590,6 +603,9 @@ class PluginDatainjectionCommonInjectionLib
         $add = true
     ) {
         $linkfield = $searchOption['storevaluein'] ?? $searchOption['linkfield'];
+        if ($field !== $linkfield && $this->isMappedField($itemtype, $field)) {
+            $this->markMappedField($itemtype, $linkfield);
+        }
 
         switch ($searchOption['displaytype']) {
             case 'tree':
@@ -919,6 +935,63 @@ class PluginDatainjectionCommonInjectionLib
             return ($values[$field] ?? false);
         }
         return false;
+    }
+
+    private static function extractMappedFields($values): array
+    {
+        $mapped_fields = [];
+        if (!is_array($values)) {
+            return $mapped_fields;
+        }
+
+        foreach ($values as $itemtype => $fields) {
+            if (!is_array($fields)) {
+                continue;
+            }
+
+            foreach (array_keys($fields) as $field) {
+                if (!is_string($field) || $field === '') {
+                    continue;
+                }
+
+                $mapped_fields[$itemtype][$field] = true;
+            }
+        }
+
+        return $mapped_fields;
+    }
+
+    private function markMappedField(string $itemtype, string $field): void
+    {
+        if ($field === '') {
+            return;
+        }
+
+        $this->mapped_fields[$itemtype][$field] = true;
+    }
+
+    private function isMappedField(string $itemtype, string $field): bool
+    {
+        return isset($this->mapped_fields[$itemtype][$field]);
+    }
+
+    private function getMappedFieldsForItemtype(string $itemtype): array
+    {
+        return array_keys($this->mapped_fields[$itemtype] ?? []);
+    }
+
+    private function shouldWriteFieldForUpdate(string $itemtype, string $field): bool
+    {
+        return $this->isMappedField($itemtype, $field)
+            || in_array($field, self::UPDATE_METADATA_FIELDS, true);
+    }
+
+    private function getHistoryContextForItemtype(string $itemtype): array
+    {
+        $context = $this->import_context;
+        $context['mapped_fields'] = $this->getMappedFieldsForItemtype($itemtype);
+
+        return $context;
     }
 
 
@@ -1735,6 +1808,10 @@ class PluginDatainjectionCommonInjectionLib
         $options  = $injectionClass->getOptions();
 
         foreach ($values as $key => $value) {
+            if (!$add && !$this->shouldWriteFieldForUpdate(get_class($item), $key)) {
+                continue;
+            }
+
             $option = self::findSearchOption($options, $key);
             if (!empty($option) && isset($option['checktype']) && $option['checktype'] == self::FIELD_VIRTUAL) {
                 break;
@@ -1806,6 +1883,7 @@ class PluginDatainjectionCommonInjectionLib
         }
 
         $history_snapshot = PluginDatainjectionHistoryLogger::beforeWrite($item, $toinject);
+        $history_context  = $this->getHistoryContextForItemtype(get_class($item));
         $newID = null;
         if (method_exists($injectionClass, 'customimport')) {
             $newID = call_user_func(
@@ -1821,7 +1899,7 @@ class PluginDatainjectionCommonInjectionLib
                 $toinject,
                 $newID,
                 $add,
-                $this->import_context,
+                $history_context,
             );
         } elseif ($item instanceof CommonDropdown && $add && !($item instanceof SoftwareLicense)) {
             $newID = $item->import($toinject);
@@ -1834,7 +1912,7 @@ class PluginDatainjectionCommonInjectionLib
                     $toinject,
                     $newID,
                     $add,
-                    $this->import_context,
+                    $history_context,
                 );
             }
         } else {
@@ -1852,7 +1930,7 @@ class PluginDatainjectionCommonInjectionLib
                     $toinject,
                     $newID,
                     $add,
-                    $this->import_context,
+                    $history_context,
                 );
             }
         }
@@ -1888,6 +1966,7 @@ class PluginDatainjectionCommonInjectionLib
                 } else {
                     $this->setValueForItemtype($itemtype, $field, $value);
                 }
+                $this->markMappedField($itemtype, $field);
                 $this->addSpecificOptionalInfos($itemtype, $field, $value);
             }
         }

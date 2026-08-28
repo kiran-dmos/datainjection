@@ -68,11 +68,11 @@ class PluginDatainjectionHistoryLogger
         self::logImportMarker($target, $add, $context);
 
         if (self::isFieldsPluginObject($item)) {
-            self::logFieldsPluginChanges($snapshot, $injectionClass, $item, $toinject, $target, $add);
+            self::logFieldsPluginChanges($snapshot, $injectionClass, $item, $toinject, $target, $add, $context);
             return;
         }
 
-        self::logNativeChanges($snapshot, $injectionClass, $item, $toinject, $newID, $target, $add);
+        self::logNativeChanges($snapshot, $injectionClass, $item, $toinject, $newID, $target, $add, $context);
     }
 
     private static function logNativeChanges(
@@ -82,7 +82,8 @@ class PluginDatainjectionHistoryLogger
         array $toinject,
         $newID,
         array $target,
-        bool $add
+        bool $add,
+        array $context
     ): void
     {
         $after = self::loadFieldsByID(get_class($item), $newID);
@@ -92,12 +93,13 @@ class PluginDatainjectionHistoryLogger
 
         $options = self::getNativeOptions($injectionClass, $item, $target);
         if (!$add) {
-            self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, false);
+            self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, false, $context);
         }
 
         foreach ($toinject as $field => $inputValue) {
             if (
-                self::shouldSkipField($field, $inputValue)
+                !self::isMappedFieldForHistory($field, $context)
+                || self::shouldSkipField($field, $inputValue)
                 || (self::isInfocomObject($item) && self::shouldSkipInfocomField($field))
             ) {
                 continue;
@@ -130,7 +132,8 @@ class PluginDatainjectionHistoryLogger
         $item,
         array $toinject,
         array $target,
-        bool $add
+        bool $add,
+        array $context
     ): void
     {
         if (
@@ -149,7 +152,7 @@ class PluginDatainjectionHistoryLogger
 
         $options = self::getFieldsPluginOptions($injectionClass, $target['itemtype'], $containerID);
         if (!$add) {
-            self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, true);
+            self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, true, $context);
         }
 
         $criteria = [
@@ -163,7 +166,10 @@ class PluginDatainjectionHistoryLogger
         }
 
         foreach ($toinject as $field => $inputValue) {
-            if (self::shouldSkipFieldsPluginField($field, $inputValue)) {
+            if (
+                !self::isMappedFieldForHistory($field, $context)
+                || self::shouldSkipFieldsPluginField($field, $inputValue)
+            ) {
                 continue;
             }
 
@@ -217,7 +223,8 @@ class PluginDatainjectionHistoryLogger
         array $target,
         array $options,
         array $toinject,
-        bool $fieldsPlugin
+        bool $fieldsPlugin,
+        array $context = []
     ): void {
         /** @var DBmysql $DB */
         global $DB;
@@ -225,7 +232,8 @@ class PluginDatainjectionHistoryLogger
         $search_option_ids = [];
         foreach ($toinject as $field => $value) {
             if (
-                ($fieldsPlugin && self::shouldSkipFieldsPluginField($field, $value))
+                !self::isMappedFieldForHistory($field, $context)
+                || ($fieldsPlugin && self::shouldSkipFieldsPluginField($field, $value))
                 || (!$fieldsPlugin && self::shouldSkipField($field, $value))
             ) {
                 continue;
@@ -767,6 +775,19 @@ class PluginDatainjectionHistoryLogger
         }
 
         return false;
+    }
+
+    private static function isMappedFieldForHistory(string $field, array $context): bool
+    {
+        if (!array_key_exists('mapped_fields', $context)) {
+            return true;
+        }
+
+        if (!is_array($context['mapped_fields'])) {
+            return true;
+        }
+
+        return in_array($field, $context['mapped_fields'], true);
     }
 
     private static function shouldSkipFieldsPluginField(string $field, $value): bool
