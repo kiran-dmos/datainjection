@@ -35,6 +35,7 @@ use Closure;
 use Computer;
 use Glpi\Tests\DbTestCase;
 use Manufacturer;
+use Notepad;
 use PluginDatainjectionComputerInjection;
 use PluginDatainjectionCommonInjectionLib;
 
@@ -134,5 +135,49 @@ final class CommonInjectionLibDataAlreadyInDbTest extends DbTestCase
         $context = $get_history_context(Computer::class);
 
         self::assertSame(['name', 'serial'], $context['mapped_fields']);
+    }
+
+    public function testRelatedItemFailureIsReportedAsWarning(): void
+    {
+        $common_injection_lib = new PluginDatainjectionCommonInjectionLib(
+            new PluginDatainjectionComputerInjection(),
+            [
+                Computer::class => [
+                    'id'   => 321,
+                    'name' => 'Computer with related note',
+                ],
+                Notepad::class => [
+                    'content' => 'Imported note',
+                ],
+            ],
+        );
+
+        $record_related_item_failure = Closure::bind(
+            function (string $itemtype, bool $add): void {
+                $this->results['status'] = PluginDatainjectionCommonInjectionLib::SUCCESS;
+                $this->results[PluginDatainjectionCommonInjectionLib::ACTION_CHECK]['status']
+                    = PluginDatainjectionCommonInjectionLib::SUCCESS;
+
+                $this->recordRelatedItemFailure($itemtype, $add);
+            },
+            $common_injection_lib,
+            PluginDatainjectionCommonInjectionLib::class,
+        );
+
+        $record_related_item_failure(Notepad::class, true);
+
+        $results = $common_injection_lib->getInjectionResults();
+        $messages = $results[PluginDatainjectionCommonInjectionLib::ACTION_CHECK];
+        $last_message = end($messages);
+
+        self::assertSame(PluginDatainjectionCommonInjectionLib::WARNING, $results['status']);
+        self::assertSame(
+            PluginDatainjectionCommonInjectionLib::WARNING,
+            $results[PluginDatainjectionCommonInjectionLib::ACTION_CHECK]['status'],
+        );
+        self::assertSame(PluginDatainjectionCommonInjectionLib::WARNING, $last_message[0]);
+        self::assertStringContainsString('Unable to add related item', $last_message[1]);
+        self::assertStringContainsString('Note', $last_message[1]);
+        self::assertStringContainsString('Computer #321', $last_message[1]);
     }
 }

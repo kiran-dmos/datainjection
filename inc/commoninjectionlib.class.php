@@ -1761,7 +1761,7 @@ class PluginDatainjectionCommonInjectionLib
 
                     foreach ($this->values as $itemtype => $data) {
                         //Do not process primary_type
-                        if ($itemtype != get_class($item)) {
+                        if ($itemtype != $this->primary_type) {
                             $injectionClass = self::getInjectionClassInstance($itemtype);
                             if (is_a($itemtype, CommonDBTM::class, true)) {
                                 $item           = new $itemtype();
@@ -1778,6 +1778,9 @@ class PluginDatainjectionCommonInjectionLib
                                 $values = $this->getValuesForItemtype($itemtype);
                                 if ($this->lastCheckBeforeProcess($injectionClass, $values)) {
                                     $tmpID  = $this->effectiveAddOrUpdate($injectionClass, $item, $values, $add);
+                                    if (!$tmpID) {
+                                        $this->recordRelatedItemFailure($itemtype, $add);
+                                    }
                                     $this->processAfterInsertOrUpdate($injectionClass, $add);
                                 }
                             }
@@ -1936,6 +1939,42 @@ class PluginDatainjectionCommonInjectionLib
         }
         $this->setValueForItemtype(get_class($item), 'id', $newID);
         return $newID;
+    }
+
+    private function recordRelatedItemFailure(string $itemtype, bool $add): void
+    {
+        if (($this->results['status'] ?? self::SUCCESS) === self::SUCCESS) {
+            $this->results['status'] = self::WARNING;
+        }
+
+        if (($this->results[self::ACTION_CHECK]['status'] ?? self::SUCCESS) === self::SUCCESS) {
+            $this->results[self::ACTION_CHECK]['status'] = self::WARNING;
+        }
+
+        $this->results[self::ACTION_CHECK][] = [
+            self::WARNING,
+            $this->getRelatedItemFailureMessage($itemtype, $add),
+        ];
+    }
+
+    private function getRelatedItemFailureMessage(string $itemtype, bool $add): string
+    {
+        $action = $add ? __('add', 'datainjection') : __('update', 'datainjection');
+        $related_type = is_callable([$itemtype, 'getTypeName'])
+            ? call_user_func([$itemtype, 'getTypeName'], 1)
+            : $itemtype;
+        $primary_type = is_callable([$this->primary_type, 'getTypeName'])
+            ? call_user_func([$this->primary_type, 'getTypeName'], 1)
+            : $this->primary_type;
+        $primary_id = $this->getValueByItemtypeAndName($this->primary_type, 'id') ?: __('unknown', 'datainjection');
+
+        return sprintf(
+            __('Unable to %1$s related item %2$s for %3$s #%4$s. Check rights and mapped values.', 'datainjection'),
+            $action,
+            $related_type,
+            $primary_type,
+            $primary_id,
+        );
     }
 
 
