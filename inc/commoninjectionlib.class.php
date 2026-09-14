@@ -2148,59 +2148,63 @@ class PluginDatainjectionCommonInjectionLib
                 } else {
                     //Type is not a relation
 
-                    //Type can be deleted
-                    if ($injectionClass->maybeDeleted()) {
-                        $where['is_deleted'] = 0;
-                    }
-
-                    //Type can be a template
-                    if ($injectionClass->maybeTemplate()) {
-                        $where['is_template'] = 0;
-                    }
-
-                    //Type can be assigned to an entity
-                    if ($injectionClass->isEntityAssign()) {
-                        //Type can be recursive
-                        if ($injectionClass->maybeRecursive()) {
-                            $where = array_merge(
-                                $where,
-                                getEntitiesRestrictCriteria(
-                                    $injectionClass->getTable(),
-                                    'entities_id',
-                                    $this->getValueByItemtypeAndName($itemtype, 'entities_id'),
-                                    true,
-                                ),
-                            );
-                        } else {
-                            //Type cannot be recursive
-                            $where['entities_id'] = $this->getValueByItemtypeAndName($itemtype, 'entities_id');
+                    if (self::isFieldsPluginContainerInstanceType($itemtype)) {
+                        $where['items_id'] = $this->getValueByItemtypeAndName($itemtype, 'items_id');
+                    } else {
+                        //Type can be deleted
+                        if ($injectionClass->maybeDeleted()) {
+                            $where['is_deleted'] = 0;
                         }
-                    }
 
-                    //Add mandatory fields to the query only if it's the primary_type to be injected
-                    if ($itemtype == $this->primary_type) {
-                        foreach ($this->mandatory_fields[$itemtype] as $field => $is_mandatory) {
-                            if ($is_mandatory) {
-                                if ($item instanceof User && $field == "useremails_id") {
-                                    $where['id'] = new QuerySubQuery([
-                                        'SELECT' => 'users_id',
-                                        'FROM'   => 'glpi_useremails',
-                                        'WHERE'  => ['email' => $this->getValueByItemtypeAndName($itemtype, $field)],
-                                    ]);
-                                } else {
-                                    $where[$field] = $this->getValueByItemtypeAndName($itemtype, $field);
-                                }
+                        //Type can be a template
+                        if ($injectionClass->maybeTemplate()) {
+                            $where['is_template'] = 0;
+                        }
+
+                        //Type can be assigned to an entity
+                        if ($injectionClass->isEntityAssign()) {
+                            //Type can be recursive
+                            if ($injectionClass->maybeRecursive()) {
+                                $where = array_merge(
+                                    $where,
+                                    getEntitiesRestrictCriteria(
+                                        $injectionClass->getTable(),
+                                        'entities_id',
+                                        $this->getValueByItemtypeAndName($itemtype, 'entities_id'),
+                                        true,
+                                    ),
+                                );
+                            } else {
+                                //Type cannot be recursive
+                                $where['entities_id'] = $this->getValueByItemtypeAndName($itemtype, 'entities_id');
                             }
                         }
-                    } else {
-                        //Table contains an itemtype field
-                        if ($injectionClass->isField('itemtype')) {
-                            $where['itemtype'] = $this->getValueByItemtypeAndName($itemtype, 'itemtype');
-                        }
 
-                        //Table contains an items_id field
-                        if ($injectionClass->isField('items_id')) {
-                            $where['items_id'] = $this->getValueByItemtypeAndName($itemtype, 'items_id');
+                        //Add mandatory fields to the query only if it's the primary_type to be injected
+                        if ($itemtype == $this->primary_type) {
+                            foreach ($this->mandatory_fields[$itemtype] as $field => $is_mandatory) {
+                                if ($is_mandatory) {
+                                    if ($item instanceof User && $field == "useremails_id") {
+                                        $where['id'] = new QuerySubQuery([
+                                            'SELECT' => 'users_id',
+                                            'FROM'   => 'glpi_useremails',
+                                            'WHERE'  => ['email' => $this->getValueByItemtypeAndName($itemtype, $field)],
+                                        ]);
+                                    } else {
+                                        $where[$field] = $this->getValueByItemtypeAndName($itemtype, $field);
+                                    }
+                                }
+                            }
+                        } else {
+                            //Table contains an itemtype field
+                            if ($injectionClass->isField('itemtype')) {
+                                $where['itemtype'] = $this->getValueByItemtypeAndName($itemtype, 'itemtype');
+                            }
+
+                            //Table contains an items_id field
+                            if ($injectionClass->isField('items_id')) {
+                                $where['items_id'] = $this->getValueByItemtypeAndName($itemtype, 'items_id');
+                            }
                         }
                     }
 
@@ -2240,6 +2244,12 @@ class PluginDatainjectionCommonInjectionLib
                 }
             }
         }
+    }
+
+    private static function isFieldsPluginContainerInstanceType(string $itemtype): bool
+    {
+        return class_exists('PluginFieldsAbstractContainerInstance')
+            && is_a($itemtype, 'PluginFieldsAbstractContainerInstance', true);
     }
 
 

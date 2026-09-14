@@ -68,11 +68,18 @@ class PluginDatainjectionHistoryLogger
         self::logImportMarker($target, $add, $context);
 
         if (self::isFieldsPluginObject($item)) {
-            self::logFieldsPluginChanges($snapshot, $injectionClass, $item, $toinject, $target, $add, $context);
+            if (self::logFieldsPluginChanges($snapshot, $injectionClass, $item, $toinject, $target, $add, $context)) {
+                self::touchHistoryTarget($target);
+            }
             return;
         }
 
-        self::logNativeChanges($snapshot, $injectionClass, $item, $toinject, $newID, $target, $add, $context);
+        if (
+            self::logNativeChanges($snapshot, $injectionClass, $item, $toinject, $newID, $target, $add, $context)
+            && self::isInfocomObject($item)
+        ) {
+            self::touchHistoryTarget($target);
+        }
     }
 
     private static function logNativeChanges(
@@ -84,11 +91,11 @@ class PluginDatainjectionHistoryLogger
         array $target,
         bool $add,
         array $context
-    ): void
+    ): bool
     {
         $after = self::loadFieldsByID(get_class($item), $newID);
         if (empty($after)) {
-            return;
+            return false;
         }
 
         $options = self::getNativeOptions($injectionClass, $item, $target);
@@ -96,6 +103,7 @@ class PluginDatainjectionHistoryLogger
             self::cleanupEmptyNoopFieldHistory($snapshot['baseline'], $target, $options, $toinject, false, $context);
         }
 
+        $changed = false;
         foreach ($toinject as $field => $inputValue) {
             if (
                 !self::isMappedFieldForHistory($field, $context)
@@ -123,7 +131,10 @@ class PluginDatainjectionHistoryLogger
                 self::normalizeLogValue($oldValue),
                 self::normalizeLogValue($newValue),
             );
+            $changed = true;
         }
+
+        return $changed;
     }
 
     private static function logFieldsPluginChanges(
@@ -134,18 +145,18 @@ class PluginDatainjectionHistoryLogger
         array $target,
         bool $add,
         array $context
-    ): void
+    ): bool
     {
         if (
             !class_exists('PluginFieldsContainer')
             || !class_exists('PluginFieldsAbstractContainerInstance')
         ) {
-            return;
+            return false;
         }
 
         $containerID = self::getFieldsPluginContainerID($injectionClass, $item, $toinject, $snapshot, $target);
         if ($containerID === null) {
-            return;
+            return false;
         }
 
         self::cleanupFieldsPluginLinkedHistory($snapshot['baseline'], $target, get_class($item));
@@ -162,9 +173,10 @@ class PluginDatainjectionHistoryLogger
         ];
         $after = self::loadFieldsByCriteria(get_class($item), $criteria);
         if (empty($after)) {
-            return;
+            return false;
         }
 
+        $changed = false;
         foreach ($toinject as $field => $inputValue) {
             if (
                 !self::isMappedFieldForHistory($field, $context)
@@ -191,7 +203,10 @@ class PluginDatainjectionHistoryLogger
                 self::normalizeLogValue(self::displayFieldsPluginValue($field, $oldValue, $option)),
                 self::normalizeLogValue(self::displayFieldsPluginValue($field, $newValue, $option)),
             );
+            $changed = true;
         }
+
+        return $changed;
     }
 
     private static function logMissingChange(
@@ -634,6 +649,27 @@ class PluginDatainjectionHistoryLogger
             'itemtype' => get_class($item),
             'items_id' => (int) $newID,
         ];
+    }
+
+    private static function touchHistoryTarget(array $target): void
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        if (!is_a($target['itemtype'], CommonDBTM::class, true)) {
+            return;
+        }
+
+        $table = getTableForItemType($target['itemtype']);
+        if (!$DB->tableExists($table) || !$DB->fieldExists($table, 'date_mod')) {
+            return;
+        }
+
+        $DB->update(
+            $table,
+            ['date_mod' => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s')],
+            ['id' => (int) $target['items_id']],
+        );
     }
 
     private static function targetKeepsHistory($item, array $target): bool
