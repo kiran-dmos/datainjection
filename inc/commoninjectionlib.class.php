@@ -617,6 +617,11 @@ class PluginDatainjectionCommonInjectionLib
                 $this->setValueForItemtype($itemtype, $linkfield, $value);
                 break;
 
+            case 'bool':
+                $bool = self::normalizeBooleanValue($value);
+                $this->setValueForItemtype($itemtype, $linkfield, $bool ?? $value);
+                break;
+
             case 'password':
                 //To add a user password, it's mandatory is give a password and it's confirmation
                 //Here we cannot detect if it's an add or update. We'll handle updates later in the process
@@ -1202,6 +1207,13 @@ class PluginDatainjectionCommonInjectionLib
                         $this->setValueForItemtype($itemtype, $field, (string) $float);
                         break;
 
+                    case "bool":
+                        $bool = self::normalizeBooleanValue($value);
+                        if ($bool !== null) {
+                            $this->setValueForItemtype($itemtype, $field, $bool);
+                        }
+                        break;
+
                     default:
                         break;
                 }
@@ -1529,15 +1541,11 @@ class PluginDatainjectionCommonInjectionLib
                     return (class_exists($data) ? self::SUCCESS : self::TYPE_MISMATCH);
 
                 case 'bool':
-                    //If not numeric => type mismatch
-                    if (!is_numeric($data)) {
-                        return self::TYPE_MISMATCH;
-                    }
-                    if ($data == 0 || $data == 1) {
+                    $bool = self::normalizeBooleanValue($data);
+                    if ($bool === self::EMPTY_VALUE && !$mandatory) {
                         return self::SUCCESS;
-                    } else {
-                        return self::TYPE_MISMATCH;
                     }
+                    return ($bool === 0 || $bool === 1) ? self::SUCCESS : self::TYPE_MISMATCH;
 
                     // no break
                 default:
@@ -1550,6 +1558,42 @@ class PluginDatainjectionCommonInjectionLib
             }
         }
         return self::SUCCESS;
+    }
+
+    private static function normalizeBooleanValue($value)
+    {
+        if ($value === null || $value === self::EMPTY_VALUE) {
+            return self::EMPTY_VALUE;
+        }
+
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        if (is_numeric($value) && (float) $value == (int) $value) {
+            $int_value = (int) $value;
+            if ($int_value === 0 || $int_value === 1) {
+                return $int_value;
+            }
+        }
+
+        $normalized = mb_strtolower(trim((string) $value));
+        if ($normalized === '' || $normalized === 'null') {
+            return self::EMPTY_VALUE;
+        }
+
+        $yes_label = class_exists('Dropdown') ? mb_strtolower(trim((string) Dropdown::getYesNo(1))) : '';
+        $no_label = class_exists('Dropdown') ? mb_strtolower(trim((string) Dropdown::getYesNo(0))) : '';
+
+        if (in_array($normalized, array_filter(['yes', 'y', 'true', 't', 'on', $yes_label]), true)) {
+            return 1;
+        }
+
+        if (in_array($normalized, array_filter(['no', 'n', 'false', 'f', 'off', $no_label]), true)) {
+            return 0;
+        }
+
+        return null;
     }
 
 
@@ -2436,6 +2480,17 @@ class PluginDatainjectionCommonInjectionLib
             } else {
                 if (in_array($tmp['field'], $add_linkfield)) {
                     $type_searchOptions[$id]['linkfield'] = $add_linkfield[$tmp['field']];
+                }
+
+                if ((isset($tmp['datatype']) && $tmp['datatype'] == 'bool') && isset($tmp['linkfield'])) {
+                    if (!isset($tmp['displaytype'])) {
+                        $type_searchOptions[$id]['displaytype'] = 'bool';
+                        $tmp['displaytype'] = 'bool';
+                    }
+                    if (!isset($tmp['checktype'])) {
+                        $type_searchOptions[$id]['checktype'] = 'bool';
+                        $tmp['checktype'] = 'bool';
+                    }
                 }
 
                 if (!in_array($id, $options['ignore_fields']) && $id < 1000) {

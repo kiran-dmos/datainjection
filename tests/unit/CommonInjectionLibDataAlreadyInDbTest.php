@@ -137,6 +137,39 @@ final class CommonInjectionLibDataAlreadyInDbTest extends DbTestCase
         self::assertSame(['name', 'serial'], $context['mapped_fields']);
     }
 
+    public function testBoolDatatypeSearchOptionsAreImportedAsBoolFields(): void
+    {
+        $options = PluginDatainjectionCommonInjectionLib::addToSearchOptions(
+            [
+                76670 => [
+                    'table'      => Computer::getTable(),
+                    'field'      => 'hw_billable',
+                    'linkfield'  => 'hw_billable',
+                    'name'       => 'DMOS Asset - HW Billable',
+                    'datatype'   => 'bool',
+                    'injectable' => PluginDatainjectionCommonInjectionLib::FIELD_INJECTABLE,
+                ],
+            ],
+            ['ignore_fields' => []],
+            new PluginDatainjectionComputerInjection(),
+        );
+
+        self::assertSame('bool', $options[76670]['displaytype']);
+        self::assertSame('bool', $options[76670]['checktype']);
+    }
+
+    public function testHumanReadableBoolValuesAreNormalizedBeforeImport(): void
+    {
+        self::assertSame(1, $this->normalizeImportBoolValue('Yes'));
+        self::assertSame(1, $this->normalizeImportBoolValue('Y'));
+        self::assertSame(1, $this->normalizeImportBoolValue('true'));
+        self::assertSame(0, $this->normalizeImportBoolValue('No'));
+        self::assertSame(0, $this->normalizeImportBoolValue('N'));
+        self::assertSame(0, $this->normalizeImportBoolValue('false'));
+        self::assertSame(0, $this->normalizeImportBoolValue('0'));
+        self::assertSame(1, $this->normalizeImportBoolValue('1'));
+    }
+
     public function testRelatedItemFailureIsReportedAsWarning(): void
     {
         $common_injection_lib = new PluginDatainjectionCommonInjectionLib(
@@ -179,5 +212,38 @@ final class CommonInjectionLibDataAlreadyInDbTest extends DbTestCase
         self::assertStringContainsString('Unable to add related item', $last_message[1]);
         self::assertStringContainsString('Note', $last_message[1]);
         self::assertStringContainsString('Computer #321', $last_message[1]);
+    }
+
+    private function normalizeImportBoolValue($value)
+    {
+        $common_injection_lib = new PluginDatainjectionCommonInjectionLib(
+            new PluginDatainjectionComputerInjection(),
+            [Computer::class => []],
+        );
+
+        $normalize = Closure::bind(
+            function ($value) {
+                $this->getFieldValue(
+                    new PluginDatainjectionComputerInjection(),
+                    Computer::class,
+                    [
+                        'table'       => Computer::getTable(),
+                        'field'       => 'is_template',
+                        'linkfield'   => 'is_template',
+                        'name'        => 'Template',
+                        'displaytype' => 'bool',
+                        'checktype'   => 'bool',
+                    ],
+                    'is_template',
+                    $value,
+                );
+
+                return $this->getValuesForItemtype(Computer::class)['is_template'];
+            },
+            $common_injection_lib,
+            PluginDatainjectionCommonInjectionLib::class,
+        );
+
+        return $normalize($value);
     }
 }
